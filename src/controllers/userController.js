@@ -4,12 +4,24 @@ import jwt from "jsonwebtoken";
 
 const createUser = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { username, email, password, phone } = req.body; // 👈 updated
+
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: "All fields are required" });
+    }
+
     const hashPassword = await bcrypt.hash(password, 10);
-    const user = new userModel({ name, email, password: hashPassword });
+    const user = new userModel({
+      name: username,   
+      email,
+      phone,
+      password: hashPassword,
+    });
+
     await user.save();
-    res.status(201).json(user);
+    res.status(201).json({ message: "User created successfully", data: user });
   } catch (error) {
+    console.error(error);
     res.status(400).json({ error: "Failed to create user" });
   }
 };

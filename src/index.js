@@ -18,6 +18,8 @@ const frontendURL = process.env.FRONTEND_URL;
 app.use(
   cors({
     origin: frontendURL,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
 );

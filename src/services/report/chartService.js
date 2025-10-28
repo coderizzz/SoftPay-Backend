@@ -1,26 +1,37 @@
-import { ChartJSNodeCanvas } from "chartjs-node-canvas";
-
-const width = 400, height = 300;
-const canvas = new ChartJSNodeCanvas({ width, height });
+// src/services/report/chartService.js
+import QuickChart from "quickchart-js";
 
 export async function generateCharts(transactions) {
-  const totals = {};
-  for (const txn of transactions) {
-    totals[txn.category] = (totals[txn.category] || 0) + txn.amount;
-  }
-  const labels = Object.keys(totals);
-  const data = Object.values(totals);
+  const categoryTotals = {};
+  transactions.forEach(t => {
+    if (!t.category) return;
+    categoryTotals[t.category] =
+      (categoryTotals[t.category] || 0) + t.amount;
+  });
 
-  const pieBuffer = await canvas.renderToBuffer({
+  const labels = Object.keys(categoryTotals);
+  const values = Object.values(categoryTotals);
+
+  // Pie chart
+  const pieChart = new QuickChart();
+  pieChart.setConfig({
     type: "pie",
-    data: { labels, datasets: [{ data }] },
-    options: { plugins: { legend: { position: "bottom" } } },
+    data: { labels, datasets: [{ data: values }] },
   });
+  const pieBuffer = await pieChart.toBinary();
 
-  const barBuffer = await canvas.renderToBuffer({
+  // Bar chart
+  const barChart = new QuickChart();
+  barChart.setConfig({
     type: "bar",
-    data: { labels, datasets: [{ label: "Spending", data }] },
+    data: {
+      labels,
+      datasets: [
+        { label: "Spending", backgroundColor: "#3B5BDB", data: values },
+      ],
+    },
   });
+  const barBuffer = await barChart.toBinary();
 
   return { pieBuffer, barBuffer };
 }

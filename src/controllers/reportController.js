@@ -16,12 +16,13 @@ import { ApiError } from "../utils/apiError.js";
  */
 export const generateReport = asyncHandler(async (req, res) => {
   const { startDate, endDate, formatType = "pdf" } = req.body;
-  const userId = req.user.id;
+  const userId = req.user._id || req.user.id;
 
   const start = new Date(startDate);
   const end = new Date(endDate);
   end.setUTCHours(23, 59, 59, 999);
 
+  // 1️⃣ Fetch Transactions
   const transactions = await Transaction.find({
     userId,
     date: { $gte: start, $lte: end },
@@ -77,11 +78,19 @@ export const generateReport = asyncHandler(async (req, res) => {
     size: stats.size,
   });
 
-  // 5️⃣ Send response
+  // 5️⃣ Add direct download link for frontend
+  const downloadUrl = `${req.protocol}://${req.get(
+    "host"
+  )}/api/report/download/${report._id}`;
+
+  console.log(`✅ PDF Report generated successfully: ${filePath}`);
+
+  // 6️⃣ Send response
   res.status(201).json({
     success: true,
     message: "✅ Report generated successfully",
     report,
+    downloadUrl,
   });
 });
 
@@ -108,10 +117,19 @@ export const downloadReport = asyncHandler(async (req, res) => {
   const report = await Report.findById(req.params.id);
   if (!report) throw new ApiError(404, "Report not found");
 
-  res.download(report.fileUrl, (err) => {
+  // ✅ Ensure file exists
+  if (!fs.existsSync(report.fileUrl)) {
+    console.error("⚠️ File not found on server:", report.fileUrl);
+    throw new ApiError(404, "Report file not found on server");
+  }
+
+  // ✅ Use safe filename when downloading
+  const fileName = path.basename(report.fileUrl);
+
+  res.download(report.fileUrl, fileName, (err) => {
     if (err) {
-      console.error("Download error:", err);
-      throw new ApiError(500, "Error downloading the report");
+      console.error("❌ Download error:", err);
+      res.status(500).json({ error: "Failed to download report file" });
     }
   });
 });
