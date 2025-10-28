@@ -15,14 +15,33 @@ connectDB();
 const app = express();
 const frontendURL = process.env.FRONTEND_URL;
 
+import cors from "cors";
+
 app.use(
   cors({
-    origin: frontendURL,
+    origin: (origin, callback) => {
+      const allowedOrigins = [
+        "https://soft-pay-frontend.vercel.app",
+        "http://localhost:5173",
+      ];
+
+      // Allow all Vercel preview URLs (e.g., soft-pay-frontend-*.vercel.app)
+      if (
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        /\.vercel\.app$/.test(origin)
+      ) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
 );
+
 app.use(express.json());
 app.use(morgan("dev"));
 app.use(cookieParser());
