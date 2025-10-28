@@ -1,14 +1,16 @@
-import mongoose from "mongoose";
 import Budget from "../models/budgetModel.js";
 import Transaction from "../models/Transaction.js";
 import BudgetHistory from "../models/budgetHistoryModel.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from "dotenv";
-import fetch from "node-fetch"; // Required for OpenAI image API
+import fetch from "node-fetch"; // For OpenAI meme API
 dotenv.config();
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// ===============================================
+// 😂 Generate Funny Comment + Meme
+// ===============================================
 const generateFunnyComment = async (category, difference) => {
   const overspend = difference > 0;
   const fallbackRoasts = [
@@ -24,45 +26,49 @@ const generateFunnyComment = async (category, difference) => {
   ];
 
   try {
-    // Generate funny message text using Gemini
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const prompt = `Create a short, Gen Z meme-style roast or funny quote about ${
       overspend ? "overspending" : "saving"
     } in ${category}. Tone: sarcastic, relatable, playful. Use emojis naturally.`;
     const result = await model.generateContent(prompt);
-    const text = result.response.text().trim() || fallbackRoasts[Math.floor(Math.random() * fallbackRoasts.length)];
+    const text =
+      result.response.text().trim() ||
+      fallbackRoasts[Math.floor(Math.random() * fallbackRoasts.length)];
 
-    // Generate meme image (optional)
+    // Try generating meme image (optional)
     const memePrompt = `funny meme about ${
       overspend ? "overspending" : "saving"
     } in ${category}, trending meme style, high quality, PNG`;
-    let funnyMemeUrl = "";
 
+    let funnyMemeUrl = "";
     try {
-      const memeResponse = await fetch("https://api.openai.com/v1/images/generations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-image-1",
-          prompt: memePrompt,
-          size: "512x512",
-        }),
-      });
+      const memeResponse = await fetch(
+        "https://api.openai.com/v1/images/generations",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          },
+          body: JSON.stringify({
+            model: "gpt-image-1",
+            prompt: memePrompt,
+            size: "512x512",
+          }),
+        }
+      );
       const memeData = await memeResponse.json();
       funnyMemeUrl = memeData?.data?.[0]?.url || "";
     } catch (err) {
-      console.warn("⚠️ Meme image generation failed:", err.message);
-      funnyMemeUrl = "";
+      console.warn("⚠️ Meme generation failed:", err.message);
     }
 
     return { funnyMessage: text, funnyMemeUrl };
   } catch (err) {
     console.error("Error generating funny comment:", err.message);
     return {
-      funnyMessage: fallbackRoasts[Math.floor(Math.random() * fallbackRoasts.length)],
+      funnyMessage:
+        fallbackRoasts[Math.floor(Math.random() * fallbackRoasts.length)],
       funnyMemeUrl: "",
     };
   }
@@ -74,8 +80,7 @@ const generateFunnyComment = async (category, difference) => {
 export const setBudget = async (req, res) => {
   try {
     const { predictedBudgets } = req.body;
-    const userId = req.user?.id || req.body.userId;
-    if (!userId) return res.status(400).json({ error: "User ID is required" });
+    const userId = req.user.id;
 
     let budget = await Budget.findOne({ userId });
     if (budget) {
@@ -98,8 +103,7 @@ export const setBudget = async (req, res) => {
 // ===============================================
 export const compareSpending = async (req, res) => {
   try {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ error: "User ID is required" });
+    const userId = req.user.id;
 
     const txns = await Transaction.find({ userId });
     const actualSpending = {
@@ -118,7 +122,8 @@ export const compareSpending = async (req, res) => {
     });
 
     const budget = await Budget.findOne({ userId });
-    if (!budget) return res.status(404).json({ error: "No budget found for this user" });
+    if (!budget)
+      return res.status(404).json({ error: "No budget found for this user" });
 
     const comparison = Object.keys(actualSpending).map((category) => {
       const predicted = budget.predictedBudgets[category] || 0;
@@ -139,13 +144,12 @@ export const compareSpending = async (req, res) => {
 // ===============================================
 export const generateMonthlyInsight = async (req, res) => {
   try {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ error: "User ID is required" });
+    const userId = req.user.id;
 
-    const userObjectId = new mongoose.Types.ObjectId(userId);
-    const txns = await Transaction.find({ userId: userObjectId });
-    const budget = await Budget.findOne({ userId: userObjectId });
-    if (!budget) return res.status(404).json({ error: "No budget found for user" });
+    const txns = await Transaction.find({ userId });
+    const budget = await Budget.findOne({ userId });
+    if (!budget)
+      return res.status(404).json({ error: "No budget found for user" });
 
     const actualSpending = {
       food: 0,
@@ -169,15 +173,27 @@ export const generateMonthlyInsight = async (req, res) => {
       return { category: cat, predicted, actual, difference };
     });
 
-    const totalPredicted = Object.values(budget.predictedBudgets).reduce((a, b) => a + b, 0);
-    const totalActual = Object.values(actualSpending).reduce((a, b) => a + b, 0);
-    const overspendPercent = ((totalActual - totalPredicted) / totalPredicted) * 100;
+    const totalPredicted = Object.values(budget.predictedBudgets).reduce(
+      (a, b) => a + b,
+      0
+    );
+    const totalActual = Object.values(actualSpending).reduce(
+      (a, b) => a + b,
+      0
+    );
+    const overspendPercent =
+      ((totalActual - totalPredicted) / totalPredicted) * 100;
 
-    const topCategory = comparison.sort((a, b) => b.actual - a.actual)[0]?.category || "N/A";
-    const topDifference = comparison.sort((a, b) => b.difference - a.difference)[0]?.difference || 0;
+    const topCategory =
+      comparison.sort((a, b) => b.actual - a.actual)[0]?.category || "N/A";
+    const topDifference =
+      comparison.sort((a, b) => b.difference - a.difference)[0]?.difference ||
+      0;
 
-    // ✅ Generate funny text + meme image
-    const { funnyMessage, funnyMemeUrl } = await generateFunnyComment(topCategory, topDifference);
+    const { funnyMessage, funnyMemeUrl } = await generateFunnyComment(
+      topCategory,
+      topDifference
+    );
 
     const now = new Date();
     const month = now.toLocaleString("default", { month: "long" });
@@ -191,7 +207,7 @@ export const generateMonthlyInsight = async (req, res) => {
       actualSpending,
       overspendPercent,
       funnyMessage,
-      funnyMemeUrl, // ✅ added meme image here
+      funnyMemeUrl,
     });
 
     await history.save();
@@ -215,10 +231,10 @@ export const generateMonthlyInsight = async (req, res) => {
 // ===============================================
 export const getAllBudgetHistory = async (req, res) => {
   try {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ error: "User ID is required" });
-
-    const histories = await BudgetHistory.find({ userId }).sort({ createdAt: -1 });
+    const userId = req.user.id;
+    const histories = await BudgetHistory.find({ userId }).sort({
+      createdAt: -1,
+    });
     res.json(histories);
   } catch (err) {
     console.error("Error fetching budget histories:", err);

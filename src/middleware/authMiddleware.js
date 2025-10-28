@@ -2,7 +2,6 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import jwt from "jsonwebtoken"
 import dotenv from "dotenv"
 import { ApiError } from "../utils/apiError.js";
-import  connectDB  from "../config/db.js";
 
 
 dotenv.config();

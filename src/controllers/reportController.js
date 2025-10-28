@@ -16,16 +16,27 @@ import { ApiError } from "../utils/apiError.js";
  */
 export const generateReport = asyncHandler(async (req, res) => {
   const { startDate, endDate, formatType = "pdf" } = req.body;
-  const userId = req.user._id;
+  const userId = req.user.id;
 
-  // 1️⃣ Fetch Transactions
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  end.setUTCHours(23, 59, 59, 999);
+
   const transactions = await Transaction.find({
     userId,
-    date: { $gte: new Date(startDate), $lte: new Date(endDate) },
+    date: { $gte: start, $lte: end },
   });
 
-  if (!transactions.length)
+  console.log("🔍 Filter params:", {
+    userId,
+    start,
+    end,
+    count: transactions.length,
+  });
+
+  if (!transactions.length) {
     throw new ApiError(404, "No transactions found for this period");
+  }
 
   // 2️⃣ Generate Charts (Pie + Bar)
   const charts = await generateCharts(transactions);
@@ -36,7 +47,13 @@ export const generateReport = asyncHandler(async (req, res) => {
   if (!fs.existsSync(reportDir)) fs.mkdirSync(reportDir);
 
   if (formatType === "pdf") {
-    filePath = await generatePDFReport(userId, transactions, charts, startDate, endDate);
+    filePath = await generatePDFReport(
+      userId,
+      transactions,
+      charts,
+      start,
+      end
+    );
   } else if (formatType === "csv") {
     filePath = await generateCSVReport(userId, transactions);
   } else if (formatType === "json") {
@@ -51,8 +68,8 @@ export const generateReport = asyncHandler(async (req, res) => {
   const stats = fs.statSync(filePath);
   const report = await Report.create({
     userId,
-    period: `${format(new Date(startDate), "dd MMM yyyy")} → ${format(
-      new Date(endDate),
+    period: `${format(new Date(start), "dd MMM yyyy")} → ${format(
+      new Date(end),
       "dd MMM yyyy"
     )}`,
     format: formatType,
@@ -60,7 +77,9 @@ export const generateReport = asyncHandler(async (req, res) => {
     size: stats.size,
   });
 
+  // 5️⃣ Send response
   res.status(201).json({
+    success: true,
     message: "✅ Report generated successfully",
     report,
   });
@@ -72,8 +91,11 @@ export const generateReport = asyncHandler(async (req, res) => {
  * ======================================================
  */
 export const getReportHistory = asyncHandler(async (req, res) => {
-  const reports = await Report.find({ userId: req.user._id }).sort({ createdAt: -1 });
-  if (!reports.length) return res.status(200).json({ message: "No reports found" });
+  const reports = await Report.find({ userId: req.user._id }).sort({
+    createdAt: -1,
+  });
+  if (!reports.length)
+    return res.status(200).json({ message: "No reports found" });
   res.status(200).json(reports);
 });
 
@@ -102,7 +124,11 @@ export const downloadReport = asyncHandler(async (req, res) => {
 export const generateMonthlyReport = async (user) => {
   try {
     const endDate = new Date();
-    const startDate = new Date(endDate.getFullYear(), endDate.getMonth() - 1, 1);
+    const startDate = new Date(
+      endDate.getFullYear(),
+      endDate.getMonth() - 1,
+      1
+    );
 
     const transactions = await Transaction.find({
       userId: user._id,
@@ -115,11 +141,20 @@ export const generateMonthlyReport = async (user) => {
     }
 
     const charts = await generateCharts(transactions);
-    const filePath = await generatePDFReport(user._id, transactions, charts, startDate, endDate);
+    const filePath = await generatePDFReport(
+      user._id,
+      transactions,
+      charts,
+      startDate,
+      endDate
+    );
 
     const report = await Report.create({
       userId: user._id,
-      period: `${format(startDate, "dd MMM yyyy")} → ${format(endDate, "dd MMM yyyy")}`,
+      period: `${format(startDate, "dd MMM yyyy")} → ${format(
+        endDate,
+        "dd MMM yyyy"
+      )}`,
       format: "pdf",
       fileUrl: filePath,
     });

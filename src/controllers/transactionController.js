@@ -16,7 +16,10 @@ export const getTransactions = async (req, res) => {
 
 export const addTransaction = async (req, res) => {
   try {
-    const txn = new Transaction(req.body);
+    const txn = new Transaction({
+      ...req.body,
+      userId: req.user.id,
+    });
     await txn.save();
     res.status(201).json(txn);
   } catch (err) {
@@ -49,11 +52,11 @@ export const getSummary = async (req, res) => {
     const txns = await Transaction.find();
 
     const totalIncome = txns
-      .filter(txn => txn.type === "income")
+      .filter((txn) => txn.type === "income")
       .reduce((sum, txn) => sum + txn.amount, 0);
 
     const totalExpense = txns
-      .filter(txn => txn.type === "expense")
+      .filter((txn) => txn.type === "expense")
       .reduce((sum, txn) => sum + txn.amount, 0);
 
     const netBalance = totalIncome - totalExpense;
@@ -61,12 +64,14 @@ export const getSummary = async (req, res) => {
     const categoryTotals = {};
     txns.forEach((txn) => {
       if (txn.category) {
-        categoryTotals[txn.category] = (categoryTotals[txn.category] || 0) + txn.amount;
+        categoryTotals[txn.category] =
+          (categoryTotals[txn.category] || 0) + txn.amount;
       }
     });
 
     const topCategory =
-      Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]?.[0] || "N/A";
+      Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0]?.[0] ||
+      "N/A";
 
     res.json({ totalIncome, totalExpense, netBalance, topCategory });
   } catch (err) {
@@ -84,7 +89,10 @@ export const getCategoryData = async (req, res) => {
       data[txn.category] = (data[txn.category] || 0) + txn.amount;
     });
 
-    const chartData = Object.entries(data).map(([name, value]) => ({ name, value }));
+    const chartData = Object.entries(data).map(([name, value]) => ({
+      name,
+      value,
+    }));
     res.json(chartData);
   } catch (err) {
     res.status(500).json({ error: "Failed to compute category chart" });
@@ -114,12 +122,18 @@ export const getMonthlyData = async (req, res) => {
 
 function keywordCategorizer(desc) {
   const d = desc.toLowerCase();
-  if (/(zomato|swiggy|restaurant|food|pizza|cafe|burger)/.test(d)) return "Food";
-  if (/(uber|ola|metro|bus|train|taxi|cab|fuel|petrol)/.test(d)) return "Transport";
-  if (/(amazon|flipkart|myntra|ajio|mall|shopping|clothes|shoes)/.test(d)) return "Shopping";
-  if (/(netflix|spotify|movie|cinema|game|music)/.test(d)) return "Entertainment";
-  if (/(bill|electricity|water|gas|mobile|recharge|rent)/.test(d)) return "Bills";
-  if (/(grocer|vegetable|fruit|mart|store|daily need)/.test(d)) return "Groceries";
+  if (/(zomato|swiggy|restaurant|food|pizza|cafe|burger)/.test(d))
+    return "Food";
+  if (/(uber|ola|metro|bus|train|taxi|cab|fuel|petrol)/.test(d))
+    return "Transport";
+  if (/(amazon|flipkart|myntra|ajio|mall|shopping|clothes|shoes)/.test(d))
+    return "Shopping";
+  if (/(netflix|spotify|movie|cinema|game|music)/.test(d))
+    return "Entertainment";
+  if (/(bill|electricity|water|gas|mobile|recharge|rent)/.test(d))
+    return "Bills";
+  if (/(grocer|vegetable|fruit|mart|store|daily need)/.test(d))
+    return "Groceries";
   return "Other";
 }
 
@@ -138,8 +152,18 @@ export const autoCategorize = async (req, res) => {
     const result = await model.generateContent(prompt);
     const aiCategory = result.response.text().trim();
 
-    const valid = ["Food", "Transport", "Shopping", "Entertainment", "Bills", "Groceries", "Other"];
-    const finalCat = valid.includes(aiCategory) ? aiCategory : keywordCategorizer(description);
+    const valid = [
+      "Food",
+      "Transport",
+      "Shopping",
+      "Entertainment",
+      "Bills",
+      "Groceries",
+      "Other",
+    ];
+    const finalCat = valid.includes(aiCategory)
+      ? aiCategory
+      : keywordCategorizer(description);
 
     res.json({ aiCategory: finalCat, source: "Gemini AI" });
   } catch (err) {
